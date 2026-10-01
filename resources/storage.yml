@@ -1,0 +1,17 @@
+# Per-target Unity Catalog objects: one schema and its landing volume.
+# Tables inside the schema are created by versioned migrations (see migrations/).
+
+resources:
+  schemas:
+    telematics_schema:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      comment: Truck telematics medallion tables (${bundle.target}).
+
+  volumes:
+    landing:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.telematics_schema.name}
+      name: ${var.landing_volume}
+      volume_type: MANAGED
+      comment: Landing zone for ping JSON files and stream checkpoints (${bundle.target}).

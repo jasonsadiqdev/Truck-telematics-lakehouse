@@ -1,0 +1,63 @@
+# Truck telematics lakehouse — one bundle, three targets (dev / test / prod)
+# that share one workspace and differ only by configuration.
+#
+# Free Edition can't create catalogs through the API (no metastore storage
+# root), so every target lives in the built-in `workspace` catalog and this
+# bundle owns everything beneath it: schema, volume, jobs and tables.
+
+bundle:
+  name: truck_telematics
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog that holds every environment's schema.
+    default: workspace
+  schema:
+    description: Per-target schema (dev / test / prod).
+  landing_volume:
+    description: Managed volume for landing ping files and stream checkpoints.
+    default: landing
+  schedule_cron:
+    description: Quartz cron expression for the pipeline job.
+    default: "0 0 * * * ?"
+  schedule_pause_status:
+    description: PAUSED or UNPAUSED.
+    default: PAUSED
+
+targets:
+  dev:
+    # Not `mode: development`: it would rename the schema to dev_<user>_dev.
+    # The bits of it we want are set explicitly instead.
+    default: true
+    presets:
+      trigger_pause_status: PAUSED
+      tags:
+        env: dev
+    workspace:
+      host: https://dbc-45369b7e-05e2.cloud.databricks.com
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/dev
+    variables:
+      schema: dev
+      schedule_pause_status: PAUSED          # manual runs only
+
+  test:
+    workspace:
+      host: https://dbc-45369b7e-05e2.cloud.databricks.com
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/test
+    variables:
+      schema: test
+      schedule_cron: "0 0 * * * ?"           # hourly
+      schedule_pause_status: UNPAUSED
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-45369b7e-05e2.cloud.databricks.com
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/prod
+    variables:
+      schema: prod
+      schedule_cron: "0 0/15 * * * ?"        # every 15 minutes
+      schedule_pause_status: UNPAUSED
