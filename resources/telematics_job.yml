@@ -1,0 +1,44 @@
+# The pipeline job: migrations → seed → generate pings (→ bronze → silver → gold).
+# No cluster is defined on any task, so every task runs on serverless compute.
+
+resources:
+  jobs:
+    telematics_pipeline:
+      name: telematics-pipeline-${bundle.target}
+      description: Truck telematics medallion pipeline (${bundle.target}).
+      max_concurrent_runs: 1        # never run two migrations / MERGEs at once
+
+      schedule:
+        quartz_cron_expression: ${var.schedule_cron}
+        timezone_id: UTC
+        pause_status: ${var.schedule_pause_status}
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${resources.schemas.telematics_schema.name}
+        - name: volume
+          default: ${resources.volumes.landing.name}
+
+      tasks:
+        - task_key: run_migrations
+          notebook_task:
+            notebook_path: ../src/00_run_migrations.py
+            base_parameters:
+              migrations_dir: ${workspace.file_path}/migrations
+
+        - task_key: seed_truck_details
+          depends_on:
+            - task_key: run_migrations
+          notebook_task:
+            notebook_path: ../src/01_seed_truck_details.py
+
+        - task_key: generate_pings
+          depends_on:
+            - task_key: run_migrations
+          notebook_task:
+            notebook_path: ../src/02_generate_pings.py
+            base_parameters:
+              num_batches: "10"
+              sleep_seconds: "1"
