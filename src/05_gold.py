@@ -9,7 +9,8 @@
 # MAGIC
 # MAGIC Per micro-batch: keep each truck's latest ping, then MERGE into Gold only
 # MAGIC when it's newer than what Gold already has. Late or replayed pings can
-# MAGIC never move a truck backwards, so the write is idempotent.
+# MAGIC never move a truck backwards, so the write is idempotent. Each position
+# MAGIC is also flagged `in_geofence` (Chicago depot yard box; column from V002).
 
 # COMMAND ----------
 
@@ -29,6 +30,10 @@ TRUCKS = f"`{catalog}`.`{schema}`.truck_details"
 GOLD = f"`{catalog}`.`{schema}`.gold_truck_current_position"
 CHECKPOINT = f"/Volumes/{catalog}/{schema}/{volume}/_checkpoints/gold_truck_current_position"
 
+# Chicago depot yard geofence (added in V002, which also backfills existing rows).
+GEOFENCE_LAT = (41.80, 41.90)
+GEOFENCE_LON = (-87.70, -87.60)
+
 # COMMAND ----------
 
 pings = spark.readStream.table(SILVER).select("truck_id", "latitude", "longitude", "event_ts")
@@ -46,6 +51,9 @@ def upsert_gold(batch_df, batch_id):
             Window.partitionBy("truck_id").orderBy(F.col("event_ts").desc())))
         .filter("_rn = 1")
         .drop("_rn")
+        .withColumn("in_geofence",
+                    F.col("latitude").between(*GEOFENCE_LAT)
+                    & F.col("longitude").between(*GEOFENCE_LON))
         .withColumn("_updated_at", F.current_timestamp())
     )
     latest.createOrReplaceTempView("gold_batch")

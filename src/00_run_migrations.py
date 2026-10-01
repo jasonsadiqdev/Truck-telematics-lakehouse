@@ -37,6 +37,21 @@ spark.sql("""
 # COMMAND ----------
 
 MIGRATION_FILE = re.compile(r"^V(\d+)__(.+)\.sql$")
+ADD_COLUMN = re.compile(r"^\s*ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMNS?\b", re.IGNORECASE)
+COLUMN_EXISTS_ERRORS = ("FIELDS_ALREADY_EXISTS", "COLUMN_ALREADY_EXISTS")
+
+
+def run_statement(stmt):
+    """Run one statement. Databricks SQL has no `ADD COLUMN IF NOT EXISTS`, so an
+    ADD COLUMN whose column is already there (e.g. a run that died between the
+    ALTER and the ledger insert) is treated as already applied."""
+    try:
+        spark.sql(stmt)
+    except Exception as e:
+        if ADD_COLUMN.match(stmt) and any(code in str(e) for code in COLUMN_EXISTS_ERRORS):
+            print(f"       column already exists, skipping: {stmt.splitlines()[0]}")
+        else:
+            raise
 
 
 def split_statements(sql_text):
@@ -69,7 +84,7 @@ for version, name, path in migrations:
         continue
 
     for stmt in split_statements(sql_text):
-        spark.sql(stmt)
+        run_statement(stmt)
     spark.sql(
         "INSERT INTO _schema_migrations VALUES (:v, :n, :c, current_timestamp())",
         args={"v": version, "n": name, "c": checksum},
