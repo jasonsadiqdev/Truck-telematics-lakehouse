@@ -11,6 +11,10 @@ bundle:
 include:
   - resources/*.yml
 
+sync:
+  exclude:
+    - docs/**          # evidence screenshots; not needed in the workspace
+
 variables:
   catalog:
     description: Unity Catalog catalog that holds every environment's schema.

@@ -137,3 +137,44 @@ fails the run if an applied file changes. Fix forward with a new version.
 
 `V002__add_geofence_flag.sql` is the worked example: it added `in_geofence` to
 Gold and was promoted dev → test → prod purely through deploy + run.
+
+## Evidence
+
+### Bundle validated and deployed from the CLI
+
+![bundle validate](docs/evidence/01-validate.png)
+
+![deploy + run on dev](docs/evidence/02-deploy-run-dev.png)
+
+![deploy + run on test](docs/evidence/03-deploy-run-test.png)
+
+**Jobs running in the workspace** — one job per target, with dev paused and
+test / prod on their schedules; a prod run with all six tasks succeeded on serverless.
+
+![jobs list](docs/evidence/05-jobs-list.png)
+
+![prod run task graph](docs/evidence/06-prod-run-graph.png)
+
+**Prod schema created by the bundle and migrations**: six tables and the landing volume.
+
+![prod catalog](docs/evidence/07-catalog-prod.png)
+
+**Gold populated with the stream–static join** — current position per truck
+with make, model, driver and depot from `truck_details`, plus `in_geofence`
+from the V002 migration.
+
+![gold query](docs/evidence/08-gold-query.png)
+
+**Row counts per layer in prod**: 813 bronze → 673 silver, with 70 quarantined
+(one planted bad row per file) and 20 trucks in Gold.
+
+![layer counts](docs/evidence/09-layer-counts.png)
+
+**Column change promoted to prod via deploy only.** `in_geofence` (V002)
+reached prod through `databricks bundle deploy -t prod` + `bundle run`, with
+no manual edits. To check it:
+
+```sql
+SELECT * FROM workspace.prod._schema_migrations ORDER BY version;  -- V001, V002
+DESCRIBE HISTORY workspace.prod.gold_truck_current_position;       -- ADD COLUMNS + UPDATE, run by the job
+```
