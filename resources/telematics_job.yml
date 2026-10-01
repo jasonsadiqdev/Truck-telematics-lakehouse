@@ -1,4 +1,6 @@
-# The pipeline job: migrations → seed → generate pings (→ bronze → silver → gold).
+# The pipeline job:
+#   run_migrations ─┬─ seed_truck_details ─────────────────┐
+#                   └─ generate_pings → bronze → silver ───┴─ gold
 # No cluster is defined on any task, so every task runs on serverless compute.
 
 resources:
@@ -42,3 +44,22 @@ resources:
             base_parameters:
               num_batches: "10"
               sleep_seconds: "1"
+
+        - task_key: bronze
+          depends_on:
+            - task_key: generate_pings
+          notebook_task:
+            notebook_path: ../src/03_bronze.py
+
+        - task_key: silver
+          depends_on:
+            - task_key: bronze
+          notebook_task:
+            notebook_path: ../src/04_silver.py
+
+        - task_key: gold
+          depends_on:
+            - task_key: silver
+            - task_key: seed_truck_details
+          notebook_task:
+            notebook_path: ../src/05_gold.py
